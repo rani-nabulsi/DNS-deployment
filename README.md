@@ -118,15 +118,36 @@ The dedicated server must stay online and reachable at all times. It acts as the
 
 > A static IP is critical. If the server's IP changes, every device on the network loses DNS resolution.
 
-### Phase 2 — AdGuard Home Installation
+### Phase 2 — AdGuard Home Installation (Docker)
 
-Install AdGuard Home on the server:
+This project uses Docker Compose to run AdGuard Home in a container. This keeps the installation isolated, reproducible, and easy to back up or migrate.
+
+**Prerequisites:** Docker and Docker Compose must be installed on the server.
+
+Start the container:
 
 ```bash
-curl -s -S -L https://raw.githubusercontent.com/AdguardTeam/AdGuardHome/master/scripts/install.sh | sh -s -- -v
+docker compose up -d
 ```
 
-After installation, open the setup wizard from any device on the network:
+This pulls the official `adguard/adguardhome` image and starts it with:
+
+| Port | Protocol | Purpose |
+|------|----------|---------|
+| `53` | TCP/UDP | DNS — all network DNS queries hit this port |
+| `3000` | TCP | Setup wizard (first-time configuration only) |
+| `80` | TCP | Web UI dashboard (after setup is complete) |
+
+**Persistent volumes** are mapped to `./adguardhome/` on the host:
+
+| Container Path | Host Path | Stores |
+|----------------|-----------|--------|
+| `/opt/adguardhome/work` | `./adguardhome/work` | Runtime data (query logs, stats) |
+| `/opt/adguardhome/conf` | `./adguardhome/conf` | Configuration (settings, blocklists, filters) |
+
+These volumes survive container restarts, rebuilds, and image updates — settings are never lost.
+
+After starting, open the setup wizard from any device on the network:
 
 ```
 http://<SERVER_IP>:3000
@@ -202,6 +223,10 @@ Add blocklists in: **Filters > DNS Blocklists > Add blocklist**
 ```
 home-network-dns-sinkhole/
 ├── README.md                  # This document
+├── docker-compose.yml         # AdGuard Home container definition
+├── adguardhome/
+│   ├── work/                  # Runtime data (auto-generated)
+│   └── conf/                  # Configuration (auto-generated)
 ├── screenshots/               # AdGuard dashboard screenshots
 │   ├── dashboard-overview.png
 │   ├── query-log.png
@@ -237,15 +262,20 @@ graph LR
 
 ## Keeping the Server Running
 
-To ensure AdGuard Home stays up and restarts after a reboot:
+The `restart: unless-stopped` policy in `docker-compose.yml` ensures AdGuard Home automatically restarts after crashes or system reboots (as long as Docker itself starts on boot).
 
 ```bash
-# Check service status
-sudo launchctl list | grep AdGuardHome
+# Check container status
+docker compose ps
 
-# If AdGuard was installed via the script, it registers as a launch daemon automatically.
-# Verify with:
-sudo launchctl print system/com.adguardhome.AdGuardHome
+# View live logs
+docker compose logs -f adguardhome
+
+# Restart the container
+docker compose restart
+
+# Pull latest image and recreate
+docker compose pull && docker compose up -d
 ```
 
 Optional healthcheck script (`scripts/healthcheck.sh`):
@@ -290,6 +320,7 @@ After setup, confirm everything works:
 | Component | Role |
 |-----------|------|
 | Dedicated local server | Always-on DNS resolver host |
+| Docker + Docker Compose | Container runtime and orchestration |
 | AdGuard Home | DNS sinkhole + filtering engine |
 | Wi-Fi Router | DHCP server, forwards DNS to AdGuard |
 | DNS-over-TLS | Encrypted upstream DNS resolution |
