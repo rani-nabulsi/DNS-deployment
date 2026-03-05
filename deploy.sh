@@ -2,9 +2,15 @@
 # deploy.sh — Deploy AdGuard Home from MacBook Pro to MacBook Air
 
 # ---- Configuration ----
-REMOTE_USER="your-username"        
-REMOTE_HOST="192.168.1.x"           # ADD macbook static IP
-REMOTE_DIR="/home/$REMOTE_USER/adguard" 
+if [ -f .env ]; then
+    export $(cat .env | xargs)
+else
+    echo "Error: .env file not found. Please create one based on the README."
+    exit 1
+fi
+
+REMOTE_DIR="/Users/$REMOTE_USER/adguard" 
+
 echo "Deploying AdGuard Home to $REMOTE_USER@$REMOTE_HOST..."
 ssh "$REMOTE_USER@$REMOTE_HOST" "mkdir -p $REMOTE_DIR" # Create remote directory if it doesn't exist
 scp docker-compose.yml "$REMOTE_USER@$REMOTE_HOST:$REMOTE_DIR/docker-compose.yml" # Copy docker-compose.yml to remote machine
