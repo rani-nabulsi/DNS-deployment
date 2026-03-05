@@ -2,27 +2,39 @@
 
 A network-wide ad blocker and DNS filter deployed on a dedicated local server running [AdGuard Home](https://adguard.com/en/adguard-home/overview.html). Every device on the network gets ad-free, tracker-free browsing — no client-side software required.
 
----
-
-## Inspiration
-
-This project was inspired by the [AdGuard Home](https://github.com/AdguardTeam/AdGuardHome) open-source project. Reading through their repository and documentation made the concept click: you can run your own private DNS server that silently kills ads and trackers before they ever reach your devices.
-
-Normally, when you type a website into your browser, your device asks a DNS server to translate that domain name into an IP address. That DNS server is usually provided by your ISP — and it resolves everything, including ad servers, tracking pixels, and telemetry endpoints. AdGuard Home replaces that middleman. It sits between your devices and the internet, checks every DNS request against a blocklist, and routes known bad domains into a black hole (an invalid address like `0.0.0.0`). The ad never loads, the tracker never fires, and your bandwidth is saved — all without installing anything on individual devices.
-
-That idea — one server protecting an entire network — is what this project implements from scratch on a home network.
+<p align="center">
+  <img src="https://cdn.adguardcdn.com/website/adguard.com/products/screenshots/home/adguard_home.svg" alt="AdGuard Home" width="600"/>
+</p>
 
 ---
 
 ## Why This Exists
 
-Every device on a typical home network sends hundreds of DNS queries per hour. Many of those queries resolve to ad servers, telemetry endpoints, and tracking domains. Instead of installing an ad blocker on every device individually, this project intercepts DNS at the network level — one server filters everything.
+Every device on a home network sends hundreds of DNS queries per hour. Many resolve to ad servers, telemetry endpoints, and tracking domains. Instead of installing an ad blocker on every device, this project intercepts DNS at the network level — one server filters everything.
+
+Normally, your ISP's DNS resolver handles all lookups, including ads and trackers. AdGuard Home replaces that middleman. It checks every DNS request against a blocklist and routes known bad domains to `0.0.0.0` — the ad never loads, the tracker never fires, and no per-device setup is required.
+
+This project was inspired by the [AdGuard Home](https://github.com/AdguardTeam/AdGuardHome) open-source project.
 
 **What it solves:**
 - Ads and trackers across all devices (phones, tablets, smart TVs, IoT)
 - Unnecessary telemetry and data collection
 - Malicious domain resolution (phishing, malware C2 servers)
 - No per-device configuration needed
+
+---
+
+## Project Philosophy
+
+This repo is **not** a fork of AdGuard Home. It is a **deployment workflow and local infrastructure layer** built on top of the official AdGuard Home Docker image.
+
+| | AdGuard Home Repo | This Project |
+|---|---|---|
+| **Purpose** | DNS filtering product | Deployment workflow + local infrastructure |
+| **Contains** | Source code, UI, filtering logic | Docker Compose, deploy script, documentation |
+| **You'd use it to** | Modify AdGuard's behavior | Deploy AdGuard to your own hardware |
+
+The value here is **automation + infrastructure**: a repeatable, one-command deployment from a MacBook Pro to a dedicated MacBook Air acting as the DNS server. No changes to AdGuard's code are needed or made.
 
 ---
 
@@ -86,21 +98,11 @@ sequenceDiagram
 
 ---
 
-## Network Flow Overview
+## Before and After
 
-```mermaid
-flowchart LR
-    A[Device connects to Wi-Fi] --> B[Router assigns IP via DHCP]
-    B --> C[Router pushes DNS server = AdGuard IP]
-    C --> D[All DNS queries route to AdGuard Home]
-    D --> E{Domain on blocklist?}
-    E -- Yes --> F[Return 0.0.0.0<br/>Request blocked]
-    E -- No --> G[Forward to upstream DNS]
-    G --> H[Resolve and return IP]
+**Before:** Your router forwards every DNS query to your ISP, which resolves everything — including ad servers, trackers, and telemetry endpoints. Ads load, trackers fire, data leaves your network.
 
-    style F fill:#e63946,stroke:#d62828,color:#fff
-    style G fill:#2d6a4f,stroke:#1b4332,color:#fff
-```
+**After:** Your router forwards DNS to AdGuard Home on your MacBook Air instead. Legitimate domains resolve normally. Ad and tracking domains get sinkholed to `0.0.0.0` — the request dies silently. This works on every device on the network, including smart TVs, IoT gadgets, and mobile apps where you cannot install a browser extension.
 
 ---
 
@@ -108,12 +110,12 @@ flowchart LR
 
 ### Phase 1 — Server Setup
 
-The dedicated server must stay online and reachable at all times. It acts as the DNS resolver for the entire network.
+The dedicated server (MacBook Air) must stay online and reachable at all times. It acts as the DNS resolver for the entire network.
 
 | Step | Action |
 |------|--------|
 | 1 | Disable automatic sleep: **System Settings > Displays > Advanced > Prevent automatic sleeping when display is off** |
-| 2 | Identify the server's local IP address (`ifconfig \| grep inet`) |
+| 2 | Identify the server's local IP address (`ifconfig | grep inet`) |
 | 3 | Assign a **static IP** to the server via your router's admin panel (DHCP reservation) |
 
 > A static IP is critical. If the server's IP changes, every device on the network loses DNS resolution.
@@ -163,29 +165,95 @@ http://<SERVER_IP>:80
 
 ### Phase 3 — Router Configuration
 
+This is where the magic happens. You are telling your router to stop asking your ISP for DNS answers and start asking your MacBook Air instead.
+
 ```mermaid
 flowchart TD
     A[Log into router admin panel] --> B[Navigate to DHCP / DNS settings]
     B --> C[Set Primary DNS to server static IP]
-    C --> D[Save and apply]
-    D --> E[Reconnect a device to Wi-Fi]
-    E --> F[Check AdGuard dashboard for incoming queries]
-    F --> G{Queries appearing?}
-    G -- Yes --> H[Setup complete]
-    G -- No --> I[Verify static IP / firewall rules]
+    C --> D[Set Secondary DNS to 1.1.1.1]
+    D --> E[Save and apply]
+    E --> F[Reconnect a device to Wi-Fi]
+    F --> G[Check AdGuard dashboard for incoming queries]
+    G --> H{Queries appearing?}
+    H -- Yes --> I[Setup complete]
+    H -- No --> J[Verify static IP / firewall rules]
 
-    style H fill:#2d6a4f,stroke:#1b4332,color:#fff
-    style I fill:#e63946,stroke:#d62828,color:#fff
+    style I fill:#2d6a4f,stroke:#1b4332,color:#fff
+    style J fill:#e63946,stroke:#d62828,color:#fff
 ```
 
-**Router DNS Settings:**
+#### Step-by-Step
 
-| Field | Value |
-|-------|-------|
-| Primary DNS | `<SERVER_STATIC_IP>` |
-| Secondary DNS | `1.1.1.1` (fallback if server is offline) |
+1. Log into your router's admin panel (usually `http://192.168.1.1`)
+2. Navigate to **DHCP**, **LAN Setup**, or **DNS Settings**
+3. Set the DNS fields:
 
-> Setting a secondary DNS (like Cloudflare `1.1.1.1` or Google `8.8.8.8`) ensures the network doesn't go dark if the server reboots.
+| Field | Value | Why |
+|-------|-------|-----|
+| Primary DNS | MacBook Air's static IP (e.g. `192.168.1.51`) | Makes the Air the DNS authority for all devices |
+| Secondary DNS | `1.1.1.1` (Cloudflare) | Fallback — keeps Wi-Fi alive if the Air goes down |
+
+4. Save and apply. The router may take 30-60 seconds to restart its broadcast.
+5. Reconnect a device to Wi-Fi, generate some traffic, and check the AdGuard dashboard for incoming queries.
+
+#### Finding Your Router's IP on macOS
+
+**System Settings > Wi-Fi > Details** (next to your connected network) — scroll to the **Router** field.
+
+<p align="center">
+  <img src="images/router-ip-macos.png" alt="macOS Wi-Fi settings showing router IP address" width="500"/>
+</p>
+
+---
+
+## Results
+
+After completing the setup, the AdGuard Home dashboard shows real-time filtering statistics across all network devices:
+
+<p align="center">
+  <img src="images/adguard-dashboard.png" alt="AdGuard Home Dashboard showing blocked queries" width="700"/>
+</p>
+
+<p align="center">
+  <img src="images/adguard-stats.png" alt="AdGuard Home filtering statistics" width="700"/>
+</p>
+
+---
+
+## Deployment Script
+
+The `deploy.sh` script automates the entire deployment from the MacBook Pro to the MacBook Air over SSH. It eliminates manual steps and handles the macOS-specific Docker Keychain issue.
+
+**What it does:**
+
+```mermaid
+sequenceDiagram
+    participant Pro as MacBook Pro
+    participant Air as MacBook Air
+    participant Docker as Docker Engine
+
+    Pro->>Air: SSH — create /Users/<user>/adguard directory
+    Pro->>Air: SCP — copy docker-compose.yml
+    Pro->>Air: SSH — isolate Docker config (bypass macOS Keychain)
+    Air->>Docker: Pull adguard/adguardhome:latest
+    Air->>Docker: docker compose up -d
+    Docker-->>Air: Container running on ports 53, 3000, 80
+    Air-->>Pro: Deployment complete
+```
+
+**Usage:**
+
+```bash
+# Create .env with your Air's credentials
+echo "REMOTE_USER=yourusername" > .env
+echo "REMOTE_HOST=192.168.1.51" >> .env
+
+# Run the deployment
+./deploy.sh
+```
+
+**Key implementation detail:** macOS Docker Desktop uses the system Keychain for credential storage, which fails over SSH. The deploy script works around this by creating an isolated `DOCKER_CONFIG` directory with an empty `config.json`, bypassing the Keychain helper entirely.
 
 ---
 
@@ -221,41 +289,16 @@ Add blocklists in: **Filters > DNS Blocklists > Add blocklist**
 ## Project Structure
 
 ```
-home-network-dns-sinkhole/
+DNS-deployment/
 ├── README.md                  # This document
+├── .env                       # Remote host/user config (not committed)
+├── .gitignore                 # Ignores .env and runtime data
 ├── docker-compose.yml         # AdGuard Home container definition
-├── adguardhome/
-│   ├── work/                  # Runtime data (auto-generated)
-│   └── conf/                  # Configuration (auto-generated)
-├── screenshots/               # AdGuard dashboard screenshots
-│   ├── dashboard-overview.png
-│   ├── query-log.png
-│   └── blocked-domains.png
-└── scripts/
-    └── healthcheck.sh         # Optional: server uptime monitor
-```
-
----
-
-## DNS Resolution Path — Before vs. After
-
-```mermaid
-graph LR
-    subgraph BEFORE
-        D1[Device] --> R1[Router] --> ISP[ISP DNS]
-        ISP --> AD[ads.tracker.com<br/>Resolved]
-    end
-
-    subgraph AFTER
-        D2[Device] --> R2[Router] --> AG[AdGuard Home]
-        AG -->|Allowed| UP[Upstream DNS<br/>Encrypted]
-        AG -->|Blocked| BH[0.0.0.0<br/>Sinkholed]
-    end
-
-    style AD fill:#e63946,stroke:#d62828,color:#fff
-    style BH fill:#e63946,stroke:#d62828,color:#fff
-    style AG fill:#2d6a4f,stroke:#1b4332,color:#fff
-    style UP fill:#2d6a4f,stroke:#1b4332,color:#fff
+├── deploy.sh                  # SSH deployment script (Pro → Air)
+└── images/                    # Screenshots and diagrams
+    ├── adguard-dashboard.png  # AdGuard Home dashboard
+    ├── adguard-stats.png      # AdGuard Home filtering statistics
+    └── router-ip-macos.png    # macOS Wi-Fi settings showing router IP
 ```
 
 ---
@@ -278,28 +321,6 @@ docker compose restart
 docker compose pull && docker compose up -d
 ```
 
-Optional healthcheck script (`scripts/healthcheck.sh`):
-
-```bash
-#!/bin/bash
-# Ping AdGuard Home API to verify it's responding
-RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:80/control/status)
-
-if [ "$RESPONSE" -ne 200 ]; then
-    echo "[$(date)] AdGuard Home is DOWN. Restarting..." >> /var/log/adguard-healthcheck.log
-    sudo /Applications/AdGuardHome/AdGuardHome -s restart
-else
-    echo "[$(date)] AdGuard Home is UP." >> /var/log/adguard-healthcheck.log
-fi
-```
-
-Schedule it with cron:
-
-```bash
-# Run every 5 minutes
-*/5 * * * * /path/to/scripts/healthcheck.sh
-```
-
 ---
 
 ## Verification
@@ -319,11 +340,13 @@ After setup, confirm everything works:
 
 | Component | Role |
 |-----------|------|
-| Dedicated local server | Always-on DNS resolver host |
+| MacBook Air | Always-on DNS resolver host |
+| MacBook Pro | Deployment controller (runs `deploy.sh`) |
 | Docker + Docker Compose | Container runtime and orchestration |
 | AdGuard Home | DNS sinkhole + filtering engine |
 | Wi-Fi Router | DHCP server, forwards DNS to AdGuard |
 | DNS-over-TLS | Encrypted upstream DNS resolution |
+| SSH + SCP | Remote deployment transport |
 
 ---
 
