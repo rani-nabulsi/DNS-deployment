@@ -1,6 +1,6 @@
 # Home Network DNS Sinkhole
 
-A network-wide ad blocker and DNS filter deployed on a dedicated local server running [AdGuard Home](https://adguard.com/en/adguard-home/overview.html). Every device on the network gets ad-free, tracker-free browsing — no client-side software required.
+A network-wide ad blocker and DNS filter deployed on a dedicated local server running [AdGuard Home](https://adguard.com/en/adguard-home/overview.html). Every device on the network receives ad-free, tracker-free browsing natively, with no client-side software required.
 
 <p align="center">
   <img src="https://cdn.adguardcdn.com/website/adguard.com/products/screenshots/home/adguard_home.svg" alt="AdGuard Home" width="600"/>
@@ -10,31 +10,31 @@ A network-wide ad blocker and DNS filter deployed on a dedicated local server ru
 
 ## Why This Exists
 
-Every device on a home network sends hundreds of DNS queries per hour. Many resolve to ad servers, telemetry endpoints, and tracking domains. Instead of installing an ad blocker on every device, this project intercepts DNS at the network level — one server filters everything.
+Every device connected to a standard home network transmits hundreds of DNS queries per hour. A significant portion of these requests resolve to ad servers, telemetry endpoints, and tracking domains. Rather than installing individual content blockers on every device, this architecture intercepts DNS at the network infrastructure level. A single server filters all outbound traffic.
 
-Normally, your ISP's DNS resolver handles all lookups, including ads and trackers. AdGuard Home replaces that middleman. It checks every DNS request against a blocklist and routes known bad domains to `0.0.0.0` — the ad never loads, the tracker never fires, and no per-device setup is required.
+By default, an Internet Service Provider (ISP) supplies the DNS resolver, handling all lookups impartially—including malicious or tracking domains. AdGuard Home replaces this default resolver. It processes every network DNS request against strict blocklists, routing identified tracking domains to `0.0.0.0`. Consequently, the ad fails to load, the tracker is neutralized, and no per-device configuration is required.
 
-This project was inspired by the [AdGuard Home](https://github.com/AdguardTeam/AdGuardHome) open-source project.
+This implementation leverages the open-source [AdGuard Home](https://github.com/AdguardTeam/AdGuardHome) project.
 
-**What it solves:**
-- Ads and trackers across all devices (phones, tablets, smart TVs, IoT)
-- Unnecessary telemetry and data collection
-- Malicious domain resolution (phishing, malware C2 servers)
-- No per-device configuration needed
+**Core Objectives:**
+*   Eliminate ads and trackers across all network hardware (smartphones, tablets, smart televisions, and IoT devices).
+*   Prevent unnecessary telemetry and background data harvesting.
+*   Block malicious domain resolution, including phishing and malware command-and-control servers.
+*   Achieve zero-touch configuration for client devices.
 
 ---
 
 ## Project Philosophy
 
-This repo is **not** a fork of AdGuard Home. It is a **deployment workflow and local infrastructure layer** built on top of the official AdGuard Home Docker image.
+This repository is a deployment workflow and local infrastructure layer built around the official AdGuard Home Docker image.
 
-| | AdGuard Home Repo | This Project |
+| | AdGuard Home Repository | This Architecture |
 |---|---|---|
-| **Purpose** | DNS filtering product | Deployment workflow + local infrastructure |
-| **Contains** | Source code, UI, filtering logic | Docker Compose, deploy script, documentation |
-| **You'd use it to** | Modify AdGuard's behavior | Deploy AdGuard to your own hardware |
+| **Primary Function** | Core DNS filtering software | Deployment workflow and infrastructure mapping |
+| **Contents** | Source code, user interface, filtering logic | Docker Compose configurations, deployment scripts, documentation |
+| **Use Case** | Modifying AdGuard's internal behavior | Deploying AdGuard to dedicated local hardware |
 
-The value here is **automation + infrastructure**: a repeatable, one-command deployment from a MacBook Pro to a dedicated MacBook Air acting as the DNS server. No changes to AdGuard's code are needed or made.
+The primary value of this repository is automation and infrastructure management. It provides a repeatable, single-command deployment protocol from a primary workstation to a dedicated local server acting as the network's DNS authority.
 
 ---
 
@@ -42,13 +42,13 @@ The value here is **automation + infrastructure**: a repeatable, one-command dep
 
 ```mermaid
 graph TB
-    subgraph Home Network
+    subgraph Local Network
         Router[Wi-Fi Router<br/>DHCP + DNS Relay]
-        Server[Dedicated Server<br/>AdGuard Home<br/>Static IP: 192.168.1.x]
-        Phone[Phone]
-        Laptop[Laptop]
-        TV[Smart TV]
-        IoT[IoT Devices]
+        Server[Dedicated Server Host<br/>AdGuard Home<br/>Static IP: 192.168.1.x]
+        Phone[Mobile Devices]
+        Laptop[Workstations]
+        TV[Smart Displays]
+        IoT[IoT Infrastructure]
     end
 
     Internet((Internet<br/>Upstream DNS))
@@ -61,228 +61,213 @@ graph TB
     Server -- Allowed? Yes --> Internet
     Server -. Blocked? Sinkholed .-> Server
 
-    style Server fill:#2d6a4f,stroke:#1b4332,color:#fff
-    style Router fill:#264653,stroke:#1d3557,color:#fff
-    style Internet fill:#457b9d,stroke:#1d3557,color:#fff
+    style Server fill:#F5F5F7,stroke:#1D1D1F,color:#1D1D1F
+    style Router fill:#F5F5F7,stroke:#1D1D1F,color:#1D1D1F
+    style Phone fill:#FFFFFF,stroke:#86868B,color:#1D1D1F
+    style Laptop fill:#FFFFFF,stroke:#86868B,color:#1D1D1F
+    style TV fill:#FFFFFF,stroke:#86868B,color:#1D1D1F
+    style IoT fill:#FFFFFF,stroke:#86868B,color:#1D1D1F
+    style Internet fill:#0071E3,stroke:#0071E3,color:#FFFFFF
 ```
 
----
-
-## How DNS Sinkholing Works
+### The DNS Sinkhole Mechanism
 
 ```mermaid
 sequenceDiagram
     participant D as Client Device
-    participant R as Router
-    participant A as AdGuard Home
+    participant R as Network Router
+    participant A as AdGuard Home (Server)
     participant U as Upstream DNS
-    participant B as Blocklist
+    participant B as Blocklist Engine
 
-    D->>R: DNS query: ads.tracker.com
+    D->>R: DNS query: analytics.tracker.com
     R->>A: Forward query
-    A->>B: Check against blocklists
-    alt Domain is blocked
+    A->>B: Cross-reference blocklists
+    alt Domain Match (Blocked)
         B-->>A: MATCH FOUND
-        A-->>R: Return 0.0.0.0 (sinkhole)
-        R-->>D: Connection refused / empty
-    else Domain is allowed
+        A-->>R: Return 0.0.0.0 (Sinkhole)
+        R-->>D: Connection refused / Null route
+    else Clean Domain (Allowed)
         B-->>A: NO MATCH
-        A->>U: Forward to upstream (e.g. 1.1.1.1)
-        U-->>A: Resolved IP
+        A->>U: Forward to upstream (e.g., 1.1.1.1)
+        U-->>A: Resolved IP Address
         A-->>R: Return resolved IP
-        R-->>D: Website loads normally
+        R-->>D: Standard connection established
     end
 ```
 
-**Sinkhole response:** When a domain is on a blocklist, AdGuard returns `0.0.0.0` instead of the real IP. The request dies silently — no ad loads, no tracker fires, no data leaves the network.
+**The Sinkhole Response:** When a requested domain matches an active blocklist, the server returns an invalid IP address (`0.0.0.0`) instead of the actual destination. The network request terminates immediately at the hardware level. No bandwidth is consumed, and no analytics are transmitted.
+
+### Infrastructure: Before and After
+
+**Standard Configuration (Before):** The local router forwards all internal DNS queries directly to the ISP. The ISP resolves all requests impartially. Advertisements render, tracking scripts execute, and network data is exposed.
+
+**Filtered Configuration (After):** The local router intercepts all DNS queries and routes them strictly to the dedicated local server. Clean traffic resolves normally via encrypted upstream providers. Malicious and tracking domains are sinkholed to `0.0.0.0` and terminate silently. This protection extends automatically to native applications, smart appliances, and operating system telemetry where standard ad-blocking extensions cannot be installed.
 
 ---
 
-## Before and After
+## Implementation Protocol
 
-**Before:** Your router forwards every DNS query to your ISP, which resolves everything — including ad servers, trackers, and telemetry endpoints. Ads load, trackers fire, data leaves your network.
+### Phase 1: Server Provisioning
 
-**After:** Your router forwards DNS to AdGuard Home on your MacBook Air instead. Legitimate domains resolve normally. Ad and tracking domains get sinkholed to `0.0.0.0` — the request dies silently. This works on every device on the network, including smart TVs, IoT gadgets, and mobile apps where you cannot install a browser extension.
-
----
-
-## Implementation
-
-### Phase 1 — Server Setup
-
-The dedicated server (MacBook Air) must stay online and reachable at all times. It acts as the DNS resolver for the entire network.
+The host machine must remain powered on, connected to the local network, and accessible at all times to prevent network-wide DNS failure.
 
 | Step | Action |
 |------|--------|
-| 1 | Disable automatic sleep: **System Settings > Displays > Advanced > Prevent automatic sleeping when display is off** |
-| 2 | Identify the server's local IP address (`ifconfig | grep inet`) |
-| 3 | Assign a **static IP** to the server via your router's admin panel (DHCP reservation) |
+| 1 | **Power Management:** Configure the host operating system to prevent automatic sleep or hibernation. |
+| 2 | **Network Identification:** Determine the server's current local IP address (e.g., via `ifconfig`). |
+| 3 | **Static Allocation:** Access the local router's administrative panel and bind the server's MAC address to a strict Static IP (DHCP Reservation). |
 
-> A static IP is critical. If the server's IP changes, every device on the network loses DNS resolution.
+> **Critical Note:** A static IP is mandatory. If the DHCP server dynamically changes the host machine's IP address, the network will lose all DNS resolution capabilities, effectively severing internet access for all devices.
 
-### Phase 2 — AdGuard Home Installation (Docker)
+### Phase 2: Container Deployment
 
-This project uses Docker Compose to run AdGuard Home in a container. This keeps the installation isolated, reproducible, and easy to back up or migrate.
+This architecture utilizes Docker Compose to run the service within an isolated container environment. This approach guarantees reproducibility, simplifies updates, and ensures clean environment separation.
 
-**Prerequisites:** Docker and Docker Compose must be installed on the server.
+**Prerequisites:** The host machine must have Docker Engine and Docker Compose installed and running.
 
-Start the container:
+To initialize the environment:
 
 ```bash
 docker compose up -d
 ```
 
-This pulls the official `adguard/adguardhome` image and starts it with:
+This command retrieves the official image and binds the following required network ports:
 
 | Port | Protocol | Purpose |
 |------|----------|---------|
-| `53` | TCP/UDP | DNS — all network DNS queries hit this port |
-| `3000` | TCP | Setup wizard (first-time configuration only) |
-| `80` | TCP | Web UI dashboard (after setup is complete) |
+| `53` | TCP/UDP | DNS operations — processes all network queries. |
+| `3000` | TCP | Initial configuration interface (Setup Wizard). |
+| `80` | TCP | Standard web dashboard (Post-setup administration). |
 
-**Persistent volumes** are mapped to `./adguardhome/` on the host:
+**Data Persistence:**
+Volume mapping is utilized to ensure data integrity across container restarts and updates.
 
-| Container Path | Host Path | Stores |
-|----------------|-----------|--------|
-| `/opt/adguardhome/work` | `./adguardhome/work` | Runtime data (query logs, stats) |
-| `/opt/adguardhome/conf` | `./adguardhome/conf` | Configuration (settings, blocklists, filters) |
+| Container Path | Host Path | Storage Purpose |
+|----------------|-----------|-----------------|
+| `/opt/adguardhome/work` | `./adguardhome/work` | Active runtime data (query logs, statistical analytics). |
+| `/opt/adguardhome/conf` | `./adguardhome/conf` | Core configurations (user settings, custom filters). |
 
-These volumes survive container restarts, rebuilds, and image updates — settings are never lost.
+### Phase 3: Network Routing Configuration
 
-After starting, open the setup wizard from any device on the network:
-
-```
-http://<SERVER_IP>:3000
-```
-
-Complete the wizard — set admin credentials and configure the listening interface.
-
-**Post-setup dashboard access:**
-
-```
-http://<SERVER_IP>:80
-```
-
-### Phase 3 — Router Configuration
-
-This is where the magic happens. You are telling your router to stop asking your ISP for DNS answers and start asking your MacBook Air instead.
+This final phase integrates the server with the wider network. By modifying the router's core DHCP settings, the entire network is instructed to utilize the newly deployed server as the absolute DNS authority.
 
 ```mermaid
 flowchart TD
-    A[Log into router admin panel] --> B[Navigate to DHCP / DNS settings]
-    B --> C[Set Primary DNS to server static IP]
-    C --> D[Set Secondary DNS to 1.1.1.1]
-    D --> E[Save and apply]
-    E --> F[Reconnect a device to Wi-Fi]
-    F --> G[Check AdGuard dashboard for incoming queries]
-    G --> H{Queries appearing?}
-    H -- Yes --> I[Setup complete]
-    H -- No --> J[Verify static IP / firewall rules]
+    A[Access Router Admin Interface] --> B[Locate DHCP / LAN Settings]
+    B --> C[Set Primary DNS to Server Static IP]
+    C --> D[Set Secondary DNS to Upstream Fallback]
+    D --> E[Save Configuration]
+    E --> F[Cycle Client Wi-Fi Connection]
+    F --> G[Monitor AdGuard Dashboard]
+    G --> H{Traffic Registered?}
+    H -- Yes --> I[Deployment Successful]
+    H -- No --> J[Audit Static IP and Host Firewall]
 
-    style I fill:#2d6a4f,stroke:#1b4332,color:#fff
-    style J fill:#e63946,stroke:#d62828,color:#fff
+    style I fill:#F5F5F7,stroke:#1D1D1F,color:#1D1D1F
+    style J fill:#FFFFFF,stroke:#FF3B30,color:#1D1D1F
 ```
 
-#### Step-by-Step
+**Execution Steps:**
 
-1. Log into your router's admin panel (usually `http://192.168.1.1`)
-2. Navigate to **DHCP**, **LAN Setup**, or **DNS Settings**
-3. Set the DNS fields:
+1. Authenticate into the local router's administrative interface (commonly `http://192.168.1.x`).
 
-| Field | Value | Why |
-|-------|-------|-----|
-| Primary DNS | MacBook Air's static IP (e.g. `192.168.1.51`) | Makes the Air the DNS authority for all devices |
-| Secondary DNS | `1.1.1.1` (Cloudflare) | Fallback — keeps Wi-Fi alive if the Air goes down |
+2. Navigate to the **DHCP**, **LAN Setup**, or **Local Network** configuration menu.
 
-4. Save and apply. The router may take 30-60 seconds to restart its broadcast.
-5. Reconnect a device to Wi-Fi, generate some traffic, and check the AdGuard dashboard for incoming queries.
+3. Modify the DNS distribution fields:
 
-#### Finding Your Router's IP on macOS
+| Field | Value | Rationale |
+|-------|-------|-----------|
+| Primary DNS | The server's Static IP (e.g., `192.168.1.x`) | Establishes the host machine as the primary authority. |
+| Secondary DNS | `1.1.1.1` (Cloudflare) | Provides a clean fallback to maintain network uptime if the local server requires maintenance. |
 
-**System Settings > Wi-Fi > Details** (next to your connected network) — scroll to the **Router** field.
+4. Save the configuration and allow the router to reboot its DHCP broadcast.
+
+5. Disconnect and reconnect a client device to the network to force a new DHCP lease, then generate web traffic to verify routing.
+
+---
+
+## Verification and Results
+
+Once the router configuration is applied, the network fundamentally changes how it handles data.
+
+Through the deployment script, the Docker container on the host machine successfully binds to port 53. Simultaneously, the home router is instructed to hand out the host's static IP (`192.168.1.x`) to every device that joins the Wi-Fi network.
+
+When a smartphone or workstation connects, it natively asks the host machine for DNS directions. The Docker container intercepts this request, checks the domain against the unified blocklists, and either drops the connection or securely forwards it to the upstream provider.
+
+The resulting analytics, visible on the web dashboard, confirm that local devices are communicating directly with the containerized environment:
 
 <p align="center">
-  <img src="images/router-ip-macos.png" alt="macOS Wi-Fi settings showing router IP address" width="500"/>
+<img src="images/adguard-dashboard.png" alt="AdGuard Home Dashboard showing blocked queries" width="700"/>
+</p>
+
+<p align="center">
+<img src="images/adguard-stats.png" alt="AdGuard Home filtering statistics" width="700"/>
 </p>
 
 ---
 
-## Results
+## Automated Deployment Script
 
-After completing the setup, the AdGuard Home dashboard shows real-time filtering statistics across all network devices:
+The included `deploy.sh` script handles the complete remote installation from the primary workstation to the dedicated server via SSH. It automates directory creation, file transfer, and container orchestration.
 
-<p align="center">
-  <img src="images/adguard-dashboard.png" alt="AdGuard Home Dashboard showing blocked queries" width="700"/>
-</p>
-
-<p align="center">
-  <img src="images/adguard-stats.png" alt="AdGuard Home filtering statistics" width="700"/>
-</p>
-
----
-
-## Deployment Script
-
-The `deploy.sh` script automates the entire deployment from the MacBook Pro to the MacBook Air over SSH. It eliminates manual steps and handles the macOS-specific Docker Keychain issue.
-
-**What it does:**
+**Execution Flow:**
 
 ```mermaid
 sequenceDiagram
-    participant Pro as MacBook Pro
-    participant Air as MacBook Air
+    participant Workstation as Primary Workstation
+    participant Server as Dedicated Server
     participant Docker as Docker Engine
 
-    Pro->>Air: SSH — create /Users/<user>/adguard directory
-    Pro->>Air: SCP — copy docker-compose.yml
-    Pro->>Air: SSH — isolate Docker config (bypass macOS Keychain)
-    Air->>Docker: Pull adguard/adguardhome:latest
-    Air->>Docker: docker compose up -d
-    Docker-->>Air: Container running on ports 53, 3000, 80
-    Air-->>Pro: Deployment complete
+    Workstation->>Server: SSH — Establish working directory
+    Workstation->>Server: SCP — Transfer docker-compose.yml
+    Workstation->>Server: SSH — Configure environment variables
+    Server->>Docker: Pull adguard/adguardhome:latest
+    Server->>Docker: docker compose up -d
+    Docker-->>Server: Container initialized on ports 53, 3000, 80
+    Server-->>Workstation: Deployment verified
 ```
 
-**Usage:**
+**Usage Instructions:**
 
 ```bash
-# Create .env with your Air's credentials
-echo "REMOTE_USER=yourusername" > .env
-echo "REMOTE_HOST=192.168.1.51" >> .env
+# Define remote host credentials in a local environment file
+echo "REMOTE_USER=admin" > .env
+echo "REMOTE_HOST=192.168.1.x" >> .env
 
-# Run the deployment
+# Execute the deployment protocol
 ./deploy.sh
 ```
 
-**Key implementation detail:** macOS Docker Desktop uses the system Keychain for credential storage, which fails over SSH. The deploy script works around this by creating an isolated `DOCKER_CONFIG` directory with an empty `config.json`, bypassing the Keychain helper entirely.
+> **Engineering Note:** Local development environments often utilize system-level credential managers for Docker, which can fail during headless SSH execution. The deployment script programmatically bypasses this by generating an isolated, temporary configuration directory on the remote host, ensuring a seamless container pull and initialization.
 
 ---
 
-## AdGuard Home — Key Configuration
+## Security and Core Configuration
 
-### Upstream DNS Servers
+### Encrypted Upstream DNS
 
-AdGuard forwards allowed queries to upstream resolvers. Recommended configuration:
+To prevent the ISP from monitoring outbound DNS traffic, the server must be configured to utilize encrypted upstream resolvers. DNS-over-TLS (DoT) is highly recommended.
+
+Navigate to **Settings > DNS Settings** and input the following:
 
 ```
-tls://1.1.1.1       # Cloudflare (DNS-over-TLS)
-tls://1.0.0.1       # Cloudflare secondary
-tls://8.8.8.8       # Google
+tls://1.1.1.1       # Cloudflare Primary (DoT)
+tls://1.0.0.1       # Cloudflare Secondary (DoT)
+tls://8.8.8.8       # Google Primary (DoT)
 ```
 
-Using DNS-over-TLS (`tls://`) encrypts DNS queries between AdGuard and the upstream resolver, preventing ISP snooping.
+### Curated Blocklists
 
-### Blocklists
+While the default filtering lists are highly capable, adding curated, community-driven blocklists significantly enhances the sinkhole's effectiveness against smart television telemetry and embedded application trackers.
 
-AdGuard ships with a default blocklist. Recommended additions:
+Recommended additions via **Filters > DNS Blocklists**:
 
-| Blocklist | Purpose |
-|-----------|---------|
-| AdGuard DNS Filter | General ads and trackers |
-| Steven Black's Hosts | Unified hosts file (ads + malware) |
-| OISD Full | One of the largest curated blocklists |
-| Dan Pollock's hosts | Lightweight, well-maintained |
-
-Add blocklists in: **Filters > DNS Blocklists > Add blocklist**
+| Target List | Primary Focus |
+|-------------|---------------|
+| AdGuard DNS Filter | Broad-spectrum advertising and trackers. |
+| Steven Black's Hosts | Unified repository for adware and malware endpoints. |
+| OISD Full | Aggressive, low-false-positive telemetry blocking. |
 
 ---
 
@@ -290,66 +275,66 @@ Add blocklists in: **Filters > DNS Blocklists > Add blocklist**
 
 ```
 DNS-deployment/
-├── README.md                  # This document
-├── .env                       # Remote host/user config (not committed)
-├── .gitignore                 # Ignores .env and runtime data
-├── docker-compose.yml         # AdGuard Home container definition
-├── deploy.sh                  # SSH deployment script (Pro → Air)
-└── images/                    # Screenshots and diagrams
-    ├── adguard-dashboard.png  # AdGuard Home dashboard
-    ├── adguard-stats.png      # AdGuard Home filtering statistics
-    └── router-ip-macos.png    # macOS Wi-Fi settings showing router IP
+├── README.md                  # System documentation
+├── .env                       # Environment parameters (Excluded from version control)
+├── .gitignore                 # Repository exclusion rules
+├── docker-compose.yml         # Container architecture definition
+├── deploy.sh                  # Remote SSH automation script
+└── images/                    # Documentation assets
+    ├── adguard-dashboard.png
+    └── adguard-stats.png
 ```
 
 ---
 
-## Keeping the Server Running
+## System Maintenance
 
-The `restart: unless-stopped` policy in `docker-compose.yml` ensures AdGuard Home automatically restarts after crashes or system reboots (as long as Docker itself starts on boot).
+The `restart: unless-stopped` directive within the Docker Compose file ensures high availability. If the host machine reboots or the container faults, Docker will automatically attempt a restart.
+
+Standard operational commands (run via SSH on the host machine):
 
 ```bash
-# Check container status
+# Verify active container status
 docker compose ps
 
-# View live logs
+# Monitor real-time DNS processing logs
 docker compose logs -f adguardhome
 
-# Restart the container
+# Execute a manual system restart
 docker compose restart
 
-# Pull latest image and recreate
+# Update the architecture to the latest stable release
 docker compose pull && docker compose up -d
 ```
 
 ---
 
-## Verification
+## Diagnostic Checks
 
-After setup, confirm everything works:
+To definitively verify that the infrastructure is actively routing and filtering data:
 
-| Check | Command / Method |
-|-------|-----------------|
-| Server DNS is reachable | `nslookup google.com <SERVER_IP>` |
-| Ads are being blocked | `nslookup ads.google.com <SERVER_IP>` should return `0.0.0.0` |
-| Dashboard shows queries | Visit `http://<SERVER_IP>` and check the query log |
-| Upstream DNS is encrypted | AdGuard dashboard > Settings > DNS shows `tls://` upstreams |
+| Objective | Verification Method |
+|-----------|---------------------|
+| Verify Server Reachability | Execute `nslookup google.com 192.168.1.x` from a client workstation. |
+| Confirm Active Sinkholing | Execute `nslookup doubleclick.net 192.168.1.x`. A successful block returns `0.0.0.0`. |
+| Audit Traffic Logs | Access the server dashboard via browser (`http://192.168.1.x`) and monitor the Query Log. |
 
 ---
 
-## Tech Stack
+## Technology Stack
 
-| Component | Role |
-|-----------|------|
-| MacBook Air | Always-on DNS resolver host |
-| MacBook Pro | Deployment controller (runs `deploy.sh`) |
-| Docker + Docker Compose | Container runtime and orchestration |
-| AdGuard Home | DNS sinkhole + filtering engine |
-| Wi-Fi Router | DHCP server, forwards DNS to AdGuard |
-| DNS-over-TLS | Encrypted upstream DNS resolution |
-| SSH + SCP | Remote deployment transport |
+| Component | Function |
+|-----------|----------|
+| Dedicated Server Host | Always-on hardware executing the DNS resolver. |
+| Primary Workstation | Administrative terminal for orchestration and deployment. |
+| Docker & Compose | Container runtime engine and declarative environment orchestration. |
+| AdGuard Home | Core DNS sinkhole and filtering logic. |
+| Local Router | Network DHCP authority and primary gateway. |
+| DNS-over-TLS | Cryptographic protocol for securing upstream queries. |
+| SSH / SCP | Secure transport layer for remote system management. |
 
 ---
 
 ## License
 
-This project uses [AdGuard Home](https://github.com/AdguardTeam/AdGuardHome), which is licensed under the [GNU General Public License v3.0 (GPL-3.0)](https://github.com/AdguardTeam/AdGuardHome/blob/master/LICENSE.txt).
+This infrastructure utilizes [AdGuard Home](https://github.com/AdguardTeam/AdGuardHome), governed under the [GNU General Public License v3.0 (GPL-3.0)](https://github.com/AdguardTeam/AdGuardHome/blob/master/LICENSE.txt).
